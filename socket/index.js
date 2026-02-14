@@ -1,5 +1,5 @@
 import { EVENTS } from './events.js';
-import { createRoom, joinRoom, draw, leaveRoom } from './handlers.js';
+import { createRoom, joinRoom, draw, leaveRoom, moveCursor, deleteStroke } from './handlers.js';
 
 export const connectSocket = (io) => {
     io.on(EVENTS.CONNECTION, (socket) => {
@@ -10,7 +10,9 @@ export const connectSocket = (io) => {
         joinRoom(io, socket);
         draw(io, socket);
         leaveRoom(io, socket);
-
+        moveCursor(io, socket);
+        deleteStroke(io, socket);
+        
         socket.on('disconnect', () => {
             console.log('A user disconnected:', socket.id);
         });

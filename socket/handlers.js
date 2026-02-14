@@ -1,6 +1,7 @@
 import { EVENTS } from './events.js';
 
-// Store active rooms and their users
+// Store active rooms with their users and stroke history
+// Structure: { roomId: { users: Map, strokes: [] } }
 const rooms = new Map();
 
 // handle room creation
@@ -12,19 +13,23 @@ const createRoom = (io, socket) => {
         // Join the room
         socket.join(roomId);
 
-        // Store room data
+        // Store room data with users and stroke history
         if (!rooms.has(roomId)) {
-            rooms.set(roomId, new Map());
+            rooms.set(roomId, {
+                users: new Map(),
+                strokes: []
+            });
         }
-        rooms.get(roomId).set(userId, { userId, nickname, socketId: socket.id, isCreator: true });
+        rooms.get(roomId).users.set(userId, { userId, nickname, socketId: socket.id, isCreator: true });
 
-        console.log(rooms.get(roomId));
+        console.log(rooms.get(roomId).users);
 
         // send initial room data to creator
         callback({
             roomId,
             owner: nickname,
-            users: Array.from(rooms.get(roomId).values())
+            users: Array.from(rooms.get(roomId).users.values()),
+            strokes: [] // Empty for creator
         });
     });
 }
@@ -47,41 +52,31 @@ const joinRoom = (io, socket) => {
         // Join the room
         socket.join(roomId);
 
+        const room = rooms.get(roomId);
+        
         // Store user data
-        rooms.get(roomId).set(userId, { userId, nickname, socketId: socket.id, isCreator: false });
-        const owner = Array.from(rooms.get(roomId).values()).find(user => user.isCreator)?.nickname;
+        room.users.set(userId, { userId, nickname, socketId: socket.id, isCreator: false });
+        const owner = Array.from(room.users.values()).find(user => user.isCreator)?.nickname;
 
         // Broadcast to everyone in the room that a new user joined
         io.to(roomId).emit(EVENTS.USER_JOINED, { userId, nickname, socketId: socket.id, isCreator: false });
 
-        // send initial room data to the user who just joined
+        // send initial room data INCLUDING stroke history to the user who just joined
         if (callback) {
             callback({
                 success: true,
                 data: {
                     roomId,
                     owner,
-                    users: Array.from(rooms.get(roomId).values())
+                    users: Array.from(room.users.values()),
+                    strokes: room.strokes // Send complete stroke history
                 }
             });
         };
     });
 }
 
-// handle drawing events
-// broadcast to room participants:
-// strokeDrawn (stroke, roomId)
-const draw = (io, socket) => {
-    socket.on(EVENTS.DRAW, ({ roomId, stroke }) => {
-        // Broadcast the stroke to everyone else in the room
-        socket.to(roomId).emit(EVENTS.STROKE_DRAWN, {
-            stroke,
-            roomId
-        });
-    });
-}
-
-// handle user leaving a room
+// user leaving a room
 // broadcast to room participants:
 // roomDeleted
 // userLeft (userId, nickname, roomId, users)
@@ -91,12 +86,12 @@ const leaveRoom = (io, socket) => {
         socket.leave(roomId);
         // Remove user from room
         if (rooms.has(roomId)) {
-            const users = rooms.get(roomId);
-            const isCreator = users.get(userId)?.isCreator;
-            const nickname = users.get(userId)?.nickname;
+            const room = rooms.get(roomId);
+            const isCreator = room.users.get(userId)?.isCreator;
+            const nickname = room.users.get(userId)?.nickname;
             console.log(`User ${nickname} leaving room ${roomId}`);
-            users.delete(userId);
-            if (users.size === 0 || isCreator) {
+            room.users.delete(userId);
+            if (room.users.size === 0 || isCreator) {
                 console.log(`Deleting room ${roomId} because the creator left and no users remain`);
                 rooms.delete(roomId);
                 io.to(roomId).emit(EVENTS.ROOM_DELETED, { roomId });
@@ -107,4 +102,61 @@ const leaveRoom = (io, socket) => {
     });
 };
 
-export { createRoom, joinRoom, draw, leaveRoom };
+// handle user moving cursor
+// broadcast to room participants:
+// cursorUpdate (userId, x, y, roomId)
+const moveCursor = (io, socket) => {
+    socket.on(EVENTS.CURSOR_MOVE, ({ roomId, userId, nickname, point: {x, y} }) => {
+        console.log(`User ${nickname} moved cursor in room ${roomId} to (${x}, ${y})`);
+        // Broadcast the cursor position to everyone else in the room
+        socket.to(roomId).emit(EVENTS.CURSOR_UPDATE, { nickname, point: {x, y} });
+    });
+};
+
+// handle drawing events
+// broadcast to room participants:
+// strokeDrawn (stroke, roomId)
+// Save stroke to room history
+// Broadcast the stroke to everyone else in the room
+const draw = (io, socket) => {
+    socket.on(EVENTS.DRAW, ({ roomId, stroke }) => {
+        if (rooms.has(roomId)) {
+            rooms.get(roomId).strokes.push(stroke);
+        }
+        socket.to(roomId).emit(EVENTS.STROKE_DRAWN, {
+            stroke,
+            roomId
+        });
+    });
+}
+
+const deleteStroke = (io, socket) => {
+    socket.on(EVENTS.STROKE_DELETE, ({ roomId, strokeId, userId }) => {
+        if (rooms.has(roomId)) {
+            const room = rooms.get(roomId);
+            const isCreator = room.users.get(userId)?.isCreator;
+            
+            if (strokeId === 'all') {
+                if (isCreator) {
+                    // Creator can delete all strokes
+                    room.strokes = [];
+                    io.to(roomId).emit(EVENTS.STROKE_DELETED, { strokes: [], roomId });
+                } else {
+                    // Regular user can only delete their own strokes
+                    room.strokes = room.strokes.filter(stroke => stroke.userId !== userId);
+                    io.to(roomId).emit(EVENTS.STROKE_DELETED, { strokes: room.strokes, userId, roomId });
+                }
+            } else {
+                const strokeIndex = room.strokes.findIndex(stroke => stroke.id === strokeId);
+                if (strokeIndex !== -1) {
+                    if (room.strokes[strokeIndex].userId === userId || isCreator) {
+                        room.strokes.splice(strokeIndex, 1);
+                        io.to(roomId).emit(EVENTS.STROKE_DELETED, { strokeId, roomId });
+                    }
+                }
+            }
+        }
+    });
+};
+
+export { createRoom, joinRoom, draw, leaveRoom, moveCursor, deleteStroke };

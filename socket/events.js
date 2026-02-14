@@ -15,4 +15,6 @@ export const EVENTS = {
     CURSOR_UPDATE: 'cursorUpdate',  // server broadcasts to room participants when a user moves their cursor
     DRAW: 'draw',   // client emits when drawing
     STROKE_DRAWN: 'strokeDrawn',    // server broadcasts to room participants
+    STROKE_DELETE: 'strokeDelete',  // client emits when deleting a stroke
+    STROKE_DELETED: 'strokeDeleted', // server broadcasts to room participants
 };
