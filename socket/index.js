@@ -1,5 +1,5 @@
 import { EVENTS } from './events.js';
-import { createRoom, joinRoom, draw, leaveRoom, moveCursor, deleteStroke } from './handlers.js';
+import { createRoom, joinRoom, draw, leaveRoom, moveCursor, deleteStroke, handleUserLeave } from './handlers.js';
 
 export const connectSocket = (io) => {
     io.on(EVENTS.CONNECTION, (socket) => {
@@ -15,6 +15,8 @@ export const connectSocket = (io) => {
 
         socket.on('disconnect', () => {
             console.log('A user disconnected:', socket.id);
+            // Handle improper disconnect (closed tab, lost connection, etc.)
+            handleUserLeave(io, socket.id);
         });
     });
 

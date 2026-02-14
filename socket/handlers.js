@@ -4,6 +4,56 @@ import { EVENTS } from './events.js';
 // Structure: { roomId: { users: Map, strokes: [] } }
 const rooms = new Map();
 
+// Helper function to handle user leaving/disconnecting
+const handleUserLeave = (io, socketId, roomId = null, userId = null) => {
+    // If roomId and userId provided (explicit leave), use those
+    // Otherwise find the room by socketId (disconnect case)
+    let targetRoom = null;
+    let targetRoomId = roomId;
+    let targetUserId = userId;
+    let targetUserData = null;
+
+    if (roomId && userId) {
+        // Explicit leave
+        if (rooms.has(roomId)) {
+            targetRoom = rooms.get(roomId);
+            targetUserData = targetRoom.users.get(userId);
+        }
+    } else {
+        // Disconnect - find user by socketId
+        for (const [rId, room] of rooms.entries()) {
+            for (const [uId, userData] of room.users.entries()) {
+                if (userData.socketId === socketId) {
+                    targetRoomId = rId;
+                    targetUserId = uId;
+                    targetRoom = room;
+                    targetUserData = userData;
+                    break;
+                }
+            }
+            if (targetRoom) break;
+        }
+    }
+
+    if (!targetRoom || !targetUserData) return;
+
+    const isCreator = targetUserData.isCreator;
+    const nickname = targetUserData.nickname;
+    
+    console.log(`User ${nickname} leaving room ${targetRoomId}`);
+    
+    // Remove user from room
+    targetRoom.users.delete(targetUserId);
+    
+    if (targetRoom.users.size === 0 || isCreator) {
+        console.log(`Deleting room ${targetRoomId}`);
+        rooms.delete(targetRoomId);
+        io.to(targetRoomId).emit(EVENTS.ROOM_DELETED, { roomId: targetRoomId });
+    } else {
+        io.to(targetRoomId).emit(EVENTS.USER_LEFT, { userId: targetUserId, nickname });
+    }
+};
+
 // handle room creation
 // emit to creator:
 // userJoined (userId, nickname, roomId, users) <- initial room data
@@ -84,21 +134,8 @@ const leaveRoom = (io, socket) => {
     socket.on(EVENTS.LEAVE_ROOM, ({ roomId, userId }) => {
         // Leave the room
         socket.leave(roomId);
-        // Remove user from room
-        if (rooms.has(roomId)) {
-            const room = rooms.get(roomId);
-            const isCreator = room.users.get(userId)?.isCreator;
-            const nickname = room.users.get(userId)?.nickname;
-            console.log(`User ${nickname} leaving room ${roomId}`);
-            room.users.delete(userId);
-            if (room.users.size === 0 || isCreator) {
-                console.log(`Deleting room ${roomId} because the creator left and no users remain`);
-                rooms.delete(roomId);
-                io.to(roomId).emit(EVENTS.ROOM_DELETED, { roomId });
-            } else {
-                io.to(roomId).emit(EVENTS.USER_LEFT, { userId, nickname });
-            }
-        }
+        // Handle user leaving using helper function
+        handleUserLeave(io, socket.id, roomId, userId);
     });
 };
 
@@ -159,4 +196,4 @@ const deleteStroke = (io, socket) => {
     });
 };
 
-export { createRoom, joinRoom, draw, leaveRoom, moveCursor, deleteStroke };
+export { createRoom, joinRoom, draw, leaveRoom, moveCursor, deleteStroke, handleUserLeave };
