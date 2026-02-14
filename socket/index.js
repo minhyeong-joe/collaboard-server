@@ -12,7 +12,7 @@ export const connectSocket = (io) => {
         leaveRoom(io, socket);
         moveCursor(io, socket);
         deleteStroke(io, socket);
-        
+
         socket.on('disconnect', () => {
             console.log('A user disconnected:', socket.id);
         });

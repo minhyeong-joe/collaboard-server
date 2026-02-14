@@ -23,7 +23,7 @@ app.get('/', (req, res) => {
     res.send('Hello, World!');
 });
 
-// connect to socket.io
+// Initialize Socket.IO connection handlers
 connectSocket(io);
 
 const PORT = process.env.PORT || 4000;
