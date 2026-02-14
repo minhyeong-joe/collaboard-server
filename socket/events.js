@@ -11,6 +11,8 @@ export const EVENTS = {
     ROOM_DELETED: 'roomDeleted',   // server broadcasts to room participants when a room is deleted (e.g. when the creator leaves)
 
     // Drawing
+    CURSOR_MOVE: 'cursorMove',    // client emits when moving cursor
+    CURSOR_UPDATE: 'cursorUpdate',  // server broadcasts to room participants when a user moves their cursor
     DRAW: 'draw',   // client emits when drawing
     STROKE_DRAWN: 'strokeDrawn',    // server broadcasts to room participants
 };
