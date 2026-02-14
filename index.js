@@ -5,6 +5,7 @@ import dotenv from 'dotenv';
 dotenv.config();
 import { createServer } from 'http';
 import { Server } from 'socket.io';
+import { connectSocket } from './socket/index.js';
 
 // Initialize Express app
 const app = express();
@@ -22,14 +23,8 @@ app.get('/', (req, res) => {
     res.send('Hello, World!');
 });
 
-// socket io connection handling
-io.on('connection', (socket) => {
-    console.log('A user connected');
-
-    socket.on('disconnect', () => {
-        console.log('A user disconnected');
-    });
-});
+// connect to socket.io
+connectSocket(io);
 
 const PORT = process.env.PORT || 4000;
 
